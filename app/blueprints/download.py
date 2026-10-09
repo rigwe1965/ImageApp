@@ -2,6 +2,8 @@ import io
 
 from flask import Blueprint, current_app, request, send_file
 
+from ..extensions import limiter
+
 from .. import pipeline
 from ..settings import ImageSettings
 from ..utils import filename_with_extension
@@ -12,6 +14,7 @@ _MIME_BY_FORMAT = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp
 
 
 @download_bp.route("/download/<image_id>", methods=["GET"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_HEAVY"])
 def download_image(image_id):
     store = current_app.session_store
     settings_dict = store.get_settings(image_id)

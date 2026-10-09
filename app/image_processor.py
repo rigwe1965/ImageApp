@@ -1,27 +1,49 @@
 import io
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 import piexif
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps, UnidentifiedImageError
 
-from .errors import CorruptImageError
+from .errors import CorruptImageError, ValidationError
 from .settings import ImageSettings
 
 # rotate_degrees follows a clockwise-positive convention (matches "rotate right" UI button);
 # Pillow's Image.rotate() is counter-clockwise-positive, hence the sign flip below.
 
 
-def open_and_validate(data: bytes) -> Image.Image:
+# Upper bound on the pixel count of any image the pipeline produces (resize/rotate output).
+# The upload limit (MAX_IMAGE_DIMENSION_PIXELS) only bounds the input; without this, a 500%
+# resize or an extreme aspect ratio multiplies a legal input into gigapixels of RAM.
+MAX_OUTPUT_PIXELS = 64_000_000
+
+
+def _check_output_size(width: int, height: int) -> None:
+    if width * height > MAX_OUTPUT_PIXELS:
+        raise ValidationError("Requested output dimensions are too large.")
+
+
+def open_and_validate(data: bytes, max_pixels: Optional[int] = None) -> Image.Image:
     """Authoritative content check: Pillow decodes the bytes, not the filename/Content-Type.
-    img.verify() invalidates the file object, so the image must be reopened afterward."""
+    img.verify() invalidates the file object, so the image must be reopened afterward.
+    When max_pixels is given, the size declared in the header is checked BEFORE any pixel
+    data is decoded, so an oversized image is rejected without allocating its full buffer."""
     try:
         probe = Image.open(io.BytesIO(data))
+        if max_pixels is not None and probe.width * probe.height > max_pixels:
+            raise ValidationError("Image dimensions are too large to process.")
         probe.verify()
+    except ValidationError:
+        raise
     except Exception as exc:
         raise CorruptImageError("The uploaded file is not a valid or supported image.") from exc
     try:
         img = Image.open(io.BytesIO(data))
+        if max_pixels is not None and img.width * img.height > max_pixels:
+            raise ValidationError("Image dimensions are too large to process.")
         img.load()
+    except ValidationError:
+        raise
     except (UnidentifiedImageError, OSError) as exc:
         raise CorruptImageError("The uploaded file is not a valid or supported image.") from exc
     return img
@@ -44,8 +66,8 @@ def _normalize_format(fmt: Optional[str]) -> str:
     return "PNG"  # safest default for unusual source formats (BMP, GIF) — preserves any transparency
 
 
-def get_original_info(data: bytes) -> Dict[str, Any]:
-    img = open_and_validate(data)
+def get_original_info(data: bytes, max_pixels: Optional[int] = None) -> Dict[str, Any]:
+    img = open_and_validate(data, max_pixels)
     # Report dimensions as they'll actually be treated everywhere else: browsers auto-orient
     # JPEGs with an EXIF orientation tag when displaying <img>, and apply_settings() does the
     # same by default (auto_orient=True) — so width/height here must match that oriented view,
@@ -79,6 +101,7 @@ def _apply_resize(img: Image.Image, settings: ImageSettings) -> Image.Image:
     if settings.resize_mode == "percentage":
         scale = settings.resize_percentage / 100.0
         new_w, new_h = max(1, round(w * scale)), max(1, round(h * scale))
+        _check_output_size(new_w, new_h)
         return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
     # dimensions mode
@@ -95,6 +118,7 @@ def _apply_resize(img: Image.Image, settings: ImageSettings) -> Image.Image:
         new_w, new_h = max(1, round(w * ratio)), max(1, round(h * ratio))
     else:
         new_w, new_h = target_w or w, target_h or h
+    _check_output_size(new_w, new_h)
     return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
@@ -166,6 +190,12 @@ def apply_settings(
     img = _apply_resize(img, settings)
 
     if settings.rotate_degrees:
+        rad = math.radians(settings.rotate_degrees)
+        w, h = img.size
+        _check_output_size(
+            math.ceil(abs(w * math.cos(rad)) + abs(h * math.sin(rad))),
+            math.ceil(abs(w * math.sin(rad)) + abs(h * math.cos(rad))),
+        )
         img = img.rotate(-settings.rotate_degrees, expand=True, resample=Image.Resampling.BICUBIC)
 
     if settings.flip_horizontal:

@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import threading
@@ -27,7 +28,7 @@ from .image_processor import open_and_validate  # no cycle: image_processor neve
 # separated mask, and the thresholding below removes what low-confidence noise
 # still gets through.
 _MODEL_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx"
-_MODEL_MD5 = "fc16ebd8b0c10d971d3513d564d01e29"
+_MODEL_SHA256 = "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a"
 _MODEL_DIR = os.path.join(os.path.expanduser("~"), ".imageapp", "models")
 _MODEL_PATH = os.path.join(_MODEL_DIR, "isnet-general-use.onnx")
 _INPUT_SIZE = (1024, 1024)
@@ -74,16 +75,29 @@ class BackgroundRemovalBusyError(AppError):
     code = "background_removal_busy"
 
 
+def _file_sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _ensure_model() -> str:
+    """Returns a path to model weights whose SHA-256 matches the pinned value. A cached file is
+    re-hashed (this runs once per process, since the ONNX session is memoized) so a tampered or
+    corrupted file in the user-writable model directory is never handed to onnxruntime."""
     if os.path.exists(_MODEL_PATH):
-        return _MODEL_PATH
+        if _file_sha256(_MODEL_PATH) == _MODEL_SHA256:
+            return _MODEL_PATH
+        os.remove(_MODEL_PATH)  # fails verification: discard and fetch a fresh copy below
     os.makedirs(_MODEL_DIR, exist_ok=True)
     try:
         import pooch
 
         pooch.retrieve(
             _MODEL_URL,
-            f"md5:{_MODEL_MD5}",
+            f"sha256:{_MODEL_SHA256}",
             fname=os.path.basename(_MODEL_PATH),
             path=_MODEL_DIR,
             progressbar=False,

@@ -6,6 +6,7 @@ from flask import Flask
 
 from .config import Config
 from .errors import register_error_handlers
+from .extensions import limiter
 from .storage import SessionStore
 
 
@@ -23,6 +24,7 @@ def create_app(config_class=Config):
     app.session_store = store
     store.start_cleanup_thread(app.config["CLEANUP_INTERVAL_SECONDS"])
 
+    limiter.init_app(app)
     register_error_handlers(app)
 
     from .blueprints.upload import upload_bp

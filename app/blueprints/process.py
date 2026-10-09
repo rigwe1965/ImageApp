@@ -5,12 +5,14 @@ from ..presets import list_presets, resolve_preset
 from ..auto_optimize import suggest_settings
 from ..settings import ImageSettings, SettingsValidationError
 from ..errors import ValidationError
+from ..extensions import limiter
 from ..validators import validate_and_probe_image, validate_extension, validate_file_size
 
 process_bp = Blueprint("process", __name__)
 
 
 @process_bp.route("/process/<image_id>", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_HEAVY"])
 def process_image(image_id):
     store = current_app.session_store
     body = request.get_json(silent=True)
@@ -25,6 +27,7 @@ def process_image(image_id):
 
 
 @process_bp.route("/reset/<image_id>", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_HEAVY"])
 def reset_image(image_id):
     store = current_app.session_store
     settings_dict = store.reset_settings(image_id)
@@ -47,6 +50,7 @@ def get_presets():
 
 
 @process_bp.route("/presets/<preset_id>/apply/<image_id>", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_HEAVY"])
 def apply_preset(preset_id, image_id):
     store = current_app.session_store
     info = store.get_info(image_id)
@@ -56,6 +60,7 @@ def apply_preset(preset_id, image_id):
 
 
 @process_bp.route("/auto-optimize/<image_id>", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_HEAVY"])
 def auto_optimize_image(image_id):
     store = current_app.session_store
     info = store.get_info(image_id)
@@ -72,6 +77,7 @@ def delete_session(image_id):
 
 
 @process_bp.route("/background-image/<image_id>", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_UPLOAD"])
 def upload_background_image(image_id):
     store = current_app.session_store
     store.get_info(image_id)  # 404s cleanly if the session doesn't exist

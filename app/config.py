@@ -24,6 +24,13 @@ class Config:
     SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", 45 * 60))
     CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", 5 * 60))
 
+    # Rate limits (Flask-Limiter syntax). Heavy = anything that decodes/re-encodes images.
+    RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "1").lower() not in ("0", "false", "no")
+    RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "300 per minute")
+    RATELIMIT_UPLOAD = os.environ.get("RATELIMIT_UPLOAD", "20 per minute")
+    RATELIMIT_HEAVY = os.environ.get("RATELIMIT_HEAVY", "60 per minute")
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_DIR = os.environ.get("LOG_DIR", "logs")
 

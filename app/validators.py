@@ -26,7 +26,7 @@ def validate_file_size(data: bytes, max_bytes: int) -> None:
 def validate_and_probe_image(data: bytes, allowed_formats: set, max_dimension_pixels: int) -> dict:
     """Runs the authoritative Pillow-based decode/format check and dimension guard.
     Raises CorruptImageError (via get_original_info) or UnsupportedFormatError/ValidationError."""
-    info = get_original_info(data)
+    info = get_original_info(data, max_dimension_pixels)
     if info["format"] not in allowed_formats:
         raise UnsupportedFormatError(f"Image format '{info['format']}' is not supported.")
     if info["width"] * info["height"] > max_dimension_pixels:

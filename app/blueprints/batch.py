@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 
 from .. import pipeline
 from ..errors import AppError, ValidationError
+from ..extensions import limiter
 from ..settings import ImageSettings, SettingsValidationError
 from ..utils import filename_with_extension
 
@@ -12,6 +13,7 @@ batch_bp = Blueprint("batch", __name__)
 
 
 @batch_bp.route("/batch/process", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_UPLOAD"])
 def batch_process():
     store = current_app.session_store
     body = request.get_json(silent=True) or {}
@@ -56,6 +58,7 @@ def batch_status(batch_id):
 
 
 @batch_bp.route("/batch/download-zip", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_UPLOAD"])
 def batch_download_zip():
     store = current_app.session_store
     body = request.get_json(silent=True) or {}

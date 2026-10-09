@@ -3,6 +3,7 @@ from flask import Blueprint, current_app, jsonify, request
 from .. import pipeline
 from ..auto_optimize import suggest_settings
 from ..errors import AppError, ValidationError
+from ..extensions import limiter
 from ..responses import build_process_result
 from ..utils import new_id
 from ..validators import validate_and_probe_image, validate_extension, validate_file_size
@@ -26,6 +27,7 @@ def _handle_single_upload(store, file_storage, max_single_size, allowed_extensio
 
 
 @upload_bp.route("/upload", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_UPLOAD"])
 def upload_single():
     store = current_app.session_store
     if "file" not in request.files:
@@ -46,6 +48,7 @@ def upload_single():
 
 
 @upload_bp.route("/upload/batch", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATELIMIT_UPLOAD"])
 def upload_batch():
     store = current_app.session_store
     files = request.files.getlist("files")

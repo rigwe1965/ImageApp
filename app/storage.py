@@ -103,6 +103,22 @@ class SessionStore:
         self._total_bytes = 0
         os.makedirs(self.temp_dir, exist_ok=True)
 
+    # -- memory budget -----------------------------------------------------
+
+    def _charge(self, num_bytes: int) -> None:
+        """Reserves num_bytes of the global in-memory budget or raises. Used for every cached
+        buffer (original, background-removal cutout, background image), not just uploads."""
+        with self._global_lock:
+            if self.max_total_bytes is not None and self._total_bytes + num_bytes > self.max_total_bytes:
+                raise ValidationError(
+                    "Server is at capacity (too many images held in memory). Try again shortly."
+                )
+            self._total_bytes += num_bytes
+
+    def _release(self, num_bytes: int) -> None:
+        with self._global_lock:
+            self._total_bytes = max(0, self._total_bytes - num_bytes)
+
     # -- session lifecycle -------------------------------------------------
 
     def create_session(self, original_bytes: bytes, original_filename: str,
@@ -111,12 +127,7 @@ class SessionStore:
         # returned info dict here instead of letting this decode+verify+reopen+load run twice.
         info = info or get_original_info(original_bytes)
 
-        with self._global_lock:
-            if self.max_total_bytes is not None and self._total_bytes + len(original_bytes) > self.max_total_bytes:
-                raise ValidationError(
-                    "Server is at capacity (too many images held in memory). Try again shortly."
-                )
-            self._total_bytes += len(original_bytes)
+        self._charge(len(original_bytes))
 
         try:
             image_id = new_id()
@@ -129,8 +140,7 @@ class SessionStore:
         except Exception:
             # Roll back the budget charge -- nothing was actually retained if disk I/O failed,
             # so counting these bytes forever would permanently shrink the available budget.
-            with self._global_lock:
-                self._total_bytes = max(0, self._total_bytes - len(original_bytes))
+            self._release(len(original_bytes))
             raise
 
         defaults = ImageSettings().to_dict()
@@ -215,12 +225,19 @@ class SessionStore:
         with entry.lock:
             if entry.bg_removed_cache is None:
                 original = self.get_original_bytes(image_id)
-                entry.bg_removed_cache = compute_fn(original)
+                computed = compute_fn(original)
+                self._charge(len(computed))
+                entry.bg_removed_cache = computed
             return entry.bg_removed_cache
 
     def set_background_image(self, image_id: str, data: bytes, filename: str) -> None:
         entry = self._get_entry(image_id)
         with entry.lock:
+            previous = len(entry.background_image_bytes or b"")
+            if len(data) > previous:
+                self._charge(len(data) - previous)
+            else:
+                self._release(previous - len(data))
             entry.background_image_bytes = data
             entry.background_image_filename = filename
 
@@ -231,6 +248,7 @@ class SessionStore:
     def clear_background_image(self, image_id: str) -> None:
         entry = self._get_entry(image_id)
         with entry.lock:
+            self._release(len(entry.background_image_bytes or b""))
             entry.background_image_bytes = None
             entry.background_image_filename = None
 
@@ -273,8 +291,13 @@ class SessionStore:
         _validate_id(image_id)
         with self._global_lock:
             entry = self._sessions.pop(image_id, None)
-            if entry and entry.original_bytes is not None:
-                self._total_bytes = max(0, self._total_bytes - len(entry.original_bytes))
+            if entry:
+                held = (
+                    len(entry.original_bytes or b"")
+                    + len(entry.bg_removed_cache or b"")
+                    + len(entry.background_image_bytes or b"")
+                )
+                self._total_bytes = max(0, self._total_bytes - held)
         if entry:
             self._batch_registry.remove_member(image_id, entry.batch_id)
         session_dir = safe_join_within(self.temp_dir, image_id)

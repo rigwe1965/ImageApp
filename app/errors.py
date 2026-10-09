@@ -51,6 +51,10 @@ def register_error_handlers(app):
     def handle_413(_err):
         return jsonify(PayloadTooLargeError("Upload exceeds the maximum allowed size.").to_dict()), 413
 
+    @app.errorhandler(429)
+    def handle_429(_err):
+        return jsonify({"error": {"code": "rate_limited", "message": "Too many requests. Please slow down."}}), 429
+
     @app.errorhandler(404)
     def handle_404(_err):
         return jsonify({"error": {"code": "not_found", "message": "Resource not found."}}), 404
