@@ -45,7 +45,9 @@ def create_app(config_class=Config):
     def _set_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Content-Security-Policy", "default-src 'self'")
+        response.headers.setdefault(
+            "Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:"
+        )
         return response
 
     return app
