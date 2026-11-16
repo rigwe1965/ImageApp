@@ -23,13 +23,20 @@ def _check_output_size(width: int, height: int) -> None:
         raise ValidationError("Requested output dimensions are too large.")
 
 
+# The only decoders Pillow may try. Without this, Image.open() identifies ANY of Pillow's ~40 formats by
+# content, so a TIFF/ICO/PPM/TGA/... file renamed to .jpg was fully decoded (and, because _normalize_format
+# maps unknown formats to PNG, accepted). MPO is JPEG-based (many phone and camera photos), and Pillow
+# reports it as "MPO" even when opened through the JPEG plugin, so it stays allowed.
+OPEN_FORMATS = ["JPEG", "PNG", "WEBP", "BMP", "GIF"]
+
+
 def open_and_validate(data: bytes, max_pixels: Optional[int] = None) -> Image.Image:
     """Authoritative content check: Pillow decodes the bytes, not the filename/Content-Type.
     img.verify() invalidates the file object, so the image must be reopened afterward.
     When max_pixels is given, the size declared in the header is checked BEFORE any pixel
     data is decoded, so an oversized image is rejected without allocating its full buffer."""
     try:
-        probe = Image.open(io.BytesIO(data))
+        probe = Image.open(io.BytesIO(data), formats=OPEN_FORMATS)
         if max_pixels is not None and probe.width * probe.height > max_pixels:
             raise ValidationError("Image dimensions are too large to process.")
         probe.verify()
@@ -38,7 +45,7 @@ def open_and_validate(data: bytes, max_pixels: Optional[int] = None) -> Image.Im
     except Exception as exc:
         raise CorruptImageError("The uploaded file is not a valid or supported image.") from exc
     try:
-        img = Image.open(io.BytesIO(data))
+        img = Image.open(io.BytesIO(data), formats=OPEN_FORMATS)
         if max_pixels is not None and img.width * img.height > max_pixels:
             raise ValidationError("Image dimensions are too large to process.")
         img.load()
