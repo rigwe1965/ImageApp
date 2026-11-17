@@ -130,3 +130,22 @@ against `onnxruntime`, using the same model weights `rembg` itself would downloa
 - Batch mode's shared-settings panel only exposes format/quality/metadata; background removal and
   custom background images are available in Single Image mode and via the API, but not wired into
   the batch UI, to keep the batch workflow simple.
+
+## Settings
+
+Limits and paths are environment variables with safe defaults: `MAX_SINGLE_FILE_SIZE`, `MAX_BATCH_FILES`, `MAX_TOTAL_SESSION_BYTES`, `MAX_IMAGE_DIMENSION_PIXELS`, `SESSION_TTL_SECONDS`, `CLEANUP_INTERVAL_SECONDS`, `IMAGEAPP_TEMP_DIR`, `LOG_DIR`, `LOG_LEVEL`, and the rate limits `RATELIMIT_ENABLED`, `RATELIMIT_DEFAULT`, `RATELIMIT_UPLOAD`, `RATELIMIT_HEAVY`, `RATELIMIT_STORAGE_URI`. Only the formats JPEG, PNG, WebP, BMP and GIF are accepted as uploads.
+
+## Tests
+
+```
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+CI runs the tests and a dependency vulnerability scan (`pip-audit`) on every pull request, and both must pass before anything merges to `main`.
+
+## Contributing, security and licence
+
+Work on a branch and open a pull request; add user-visible changes to [CHANGELOG.md](CHANGELOG.md). To report a security problem, read [SECURITY.md](SECURITY.md).
+
+All rights reserved. See [LICENSE](LICENSE).
