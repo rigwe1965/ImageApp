@@ -30,18 +30,27 @@ waitress-serve --host=127.0.0.1 --port=5000 --call wsgi:create_app
 
 ## Configuration (environment variables)
 
+Copy `.env.example` to `.env` (`run.py` and `wsgi.py` load it) and uncomment what you want to change. `tests/test_env_example.py` checks that every variable the code reads is listed both there and here.
+
 | Variable | Default | Purpose |
 |---|---|---|
-| `SECRET_KEY` | dev key | Flask secret key |
+| `SECRET_KEY` | random at each start | Flask secret key (nothing in the app needs it to stay the same) |
 | `MAX_CONTENT_LENGTH` | 100 MB | Whole-request size cap (Flask, triggers 413) |
 | `MAX_SINGLE_FILE_SIZE` | 25 MB | Per-file size cap |
 | `MAX_IMAGE_DIMENSION_PIXELS` | 64,000,000 | Reject images with more total pixels than this |
 | `MAX_BATCH_FILES` | 30 | Max files per batch upload |
+| `MAX_TOTAL_SESSION_BYTES` | 500 MB | All live sessions together (bounds memory) |
 | `IMAGEAPP_TEMP_DIR` | `%TEMP%\imageapp` | Where original images are stored on disk |
 | `SESSION_TTL_SECONDS` | 2700 (45 min) | Idle session lifetime before cleanup |
 | `CLEANUP_INTERVAL_SECONDS` | 300 (5 min) | How often the cleanup sweep runs |
 | `LOG_LEVEL` | INFO | Log verbosity |
 | `LOG_DIR` | `logs` | Log file directory |
+| `RATELIMIT_ENABLED` | 1 | `0`, `false` or `no` turns rate limiting off |
+| `RATELIMIT_DEFAULT` | 300 per minute | Requests per client, all routes |
+| `RATELIMIT_UPLOAD` | 20 per minute | Uploads per client |
+| `RATELIMIT_HEAVY` | 60 per minute | Routes that decode or re-encode an image |
+| `RATELIMIT_STORAGE_URI` | `memory://` | Where the counters live; use a shared store (e.g. `redis://...`) behind several workers |
+| `FLASK_DEBUG` | off | `run.py` only: `1`, `true` or `yes` turns on the debugger. Never in production |
 
 ## Architecture
 
